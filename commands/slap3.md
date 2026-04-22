@@ -2,7 +2,7 @@
 description: 三方打臉 — 平行派遣 Claude / Codex / Gemini 對目標做對抗性審查，標出共識 vs 獨有洞
 argument-hint: '[目標描述 | 檔案路徑 | --diff | --base <ref>] [focus ...]'
 disable-model-invocation: true
-allowed-tools: Read, Glob, Grep, Bash(git:*), Bash(ls:*), Bash(node:*), Bash(gemini:*), Bash(cp:*), Bash(rm:*), Bash(mktemp:*), Bash(cat:*), Bash(wc:*), AskUserQuestion, Agent
+allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion, Agent
 ---
 
 你是 `/slap3` 的派遣端 + 結果整合員。**目的**：對同一個目標**平行派遣三個不同模型**做對抗性審查，產出對照表 + 共識/獨有洞。
@@ -72,29 +72,34 @@ CODEX_COMPANION=$(ls ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-
 ```
 若 `$CODEX_COMPANION` 空 → 標「Codex 缺席（未安裝 openai-codex plugin）」，跳過。
 
-Codex 只吃 git 範圍。若目標是 working tree diff 或 base diff：
-```bash
-node "$CODEX_COMPANION" adversarial-review --wait '<focus text 含目標描述>'
-```
+**Focus text 絕對不能直接插值**（防單引號逃逸崩潰）：
+1. 先用 Write tool 把完整 focus text 寫進 `./slap3-tmp-focus-<rand>.txt`（rand 用 `date +%s%N` 或類似）
+2. Bash 用 `FOCUS=$(cat ./slap3-tmp-focus-<rand>.txt)` 讀進環境變數
+3. 呼叫時用雙引號包：`node "$CODEX_COMPANION" adversarial-review --wait "$FOCUS"`
+4. 用 `trap 'rm -f "$FOCUS_FILE"' EXIT INT TERM` 保底清理
+
+Codex 只吃 git 範圍。若目標是 working tree diff 或 base diff，直接跑 adversarial-review。
 
 若目標是**外部檔案**或**自由文字**：
-1. `mktemp` 建臨時檔名（在 cwd 下，Codex 才看得到）
-2. 把內容寫進去
-3. 執行 codex adversarial-review，focus text 指向該臨時檔
-4. **finally**：`rm` 刪臨時檔（不論成功失敗都要清）
+1. 用 Write tool 把內容寫進 `./slap3-tmp-target-<rand>.md`（在 cwd 下，Codex 才看得到）
+2. 跑 codex，focus text 描述該檔案路徑
+3. `trap` 保底清理
 
 Bash timeout 設 300000ms（5 分鐘）。
 
 ### C) Gemini（Bash）
 
-```bash
-cat <目標內容或檔案> | gemini -m gemini-3.1-pro-preview -p '<UNIVERSAL_PROMPT 的簡化版，繁中 markdown 輸出>'
-```
+**同樣不能直接插值 prompt**。流程：
+1. 用 Write tool 把完整 prompt（UNIVERSAL_PROMPT 替換完變數）寫進 `./slap3-tmp-prompt-<rand>.txt`
+2. 把目標內容寫進 `./slap3-tmp-target-<rand>.md`（若目標本來就是檔案路徑，跳過這步）
+3. Bash：
+   ```bash
+   PROMPT=$(cat ./slap3-tmp-prompt-<rand>.txt)
+   cat ./slap3-tmp-target-<rand>.md | gemini -m gemini-3.1-pro-preview -p "$PROMPT" 2>&1 | sed -n '/打臉報告/,$p'
+   ```
+4. `trap 'rm -f ./slap3-tmp-*' EXIT INT TERM` 保底清理
 
-或把內容 inline 進 `-p` 參數（目標 < 10k 字元時）。
-2>&1 後 `sed -n '/打臉報告/,$p'` 擷取報告段落（避開 gemini CLI 的 log 噪音）。
-
-Bash timeout 設 300000ms。若輸出有 `ModelNotFoundError` 或 `quota` 字樣 → 記為缺席。
+Bash timeout 設 300000ms。若輸出含 `ModelNotFoundError` 或 `quota` → 記為缺席。
 
 ---
 
