@@ -1,8 +1,38 @@
-# /slap3 — 三方打臉
+# slap — Claude Code 打臉指令家族
 
-Claude Code slash command，對同一個目標**平行派遣三個不同模型**做對抗性審查，標出**共識**（高信心真問題）vs **獨有**（模型盲點互補）。
+兩個 slash command：
 
-> 獨立視角來自**真不同模型**（Claude Opus / OpenAI gpt-5.4 / Gemini 3.1 Pro），不是同模型換 context。
+| 指令 | 審查者數 | 用途 | 狀態 |
+|---|---|---|---|
+| **`/slap3`**（推薦） | 3（Claude + Codex + Gemini） | 真獨立視角、共識交叉驗證 | v1.1，可用但有已知 bug 待 v2 |
+| **`/slap1`** | 1（Claude subagent only） | 省 quota、私密、單家能跑 | ⚠️ **已知架構缺陷**，當個人工具 OK，別當審查器 |
+
+## 為什麼 /slap3 > /slap1？
+
+同模型的 subagent（就算 fresh context）仍繼承同一組訓練偏見。三家不同公司的模型各自有盲點與強項，互相打臉才真的打得到。
+
+三家各自帶來：
+- **Claude**：偏 meta 自省（「你這個假設前提成立嗎？」）
+- **Codex (gpt-5.4)**：偏契約導向（「你怎麼保證輸出品質？」）
+- **Gemini 3.1 Pro**：偏 scope 批判（「這範圍太大，細節被摘要吃掉」）
+
+## /slap1 的已知架構缺陷
+
+曾被三方 meta 測試打穿，留著當 v2 踩坑教材。主要問題：
+
+1. **Fresh eyes 是假的** — subagent 和主 session 同模型同偏見
+2. **Injection 防禦是 theater** — nonce fence 在 LLM attention 層不嚴格
+3. **契約驗證守得住格式、守不住立場** — SHIP-WITH-CAVEATS 在被 inject 時最易偽裝
+4. **摘要策略把取樣權還給有偏見的派遣端**（已在 v2 fail-fast 改掉）
+5. **Retry 的 retry_reason 是二次注入管道**
+
+詳見作者筆記：[learning_prompt_injection_defense.md](https://github.com/miou1107/slap3/blob/main/docs/learning-prompt-injection-defense.md)（TODO，暫未公開）
+
+**使用情境**：
+- ✅ 個人自省「這想法對不對」
+- ✅ 敏感內容不想外送 OpenAI / Google
+- ❌ 當成真正的對抗性審查器
+- ❌ 審查第三方貼來的不受信內容（injection 風險）
 
 ## 為什麼不是單一 subagent？
 
@@ -38,7 +68,7 @@ Claude Code slash command，對同一個目標**平行派遣三個不同模型**
 
 **降級模式**：任何一家缺席（未安裝 / 撞 quota / timeout），slap3 會自動跳過該家繼續跑剩下的，不會整個 abort。
 
-### 安裝 slap3
+### 安裝
 
 ```bash
 # Clone
@@ -47,7 +77,8 @@ cd slap3
 
 # 複製 command 到 Claude Code 全域 commands 目錄
 mkdir -p ~/.claude/commands
-cp commands/slap3.md ~/.claude/commands/
+cp commands/slap3.md ~/.claude/commands/     # 推薦的三方版
+cp commands/slap1.md ~/.claude/commands/     # 備用的單家版（已知缺陷請看上面）
 
 # 重啟 Claude Code（新增的 slash command 需要新 session 才會載入）
 ```

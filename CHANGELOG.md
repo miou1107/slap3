@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2 — 2026-04-21
+
+### 新增
+- **`/slap1`** slash command 加入 repo — 單 Claude subagent 版本，移植自作者本機 `/slapface` v2（暫停中的實驗）
+- README 重寫為「指令家族」結構，說明 /slap3 vs /slap1 定位差異
+- README 明寫 /slap1 的已知架構缺陷（Fresh eyes 假、injection 防禦 theater、契約驗證守不住立場等），避免使用者誤當審查器
+
+### 為什麼 /slap1 仍公開
+- 省 quota / 私密場景有實用價值
+- 當教材：展示「LLM-to-LLM dispatch 架構的 injection 防禦天花板」
+
 ## v1.1 — 2026-04-21
 
 ### 修 bug（meta 測試三方打臉發現）
